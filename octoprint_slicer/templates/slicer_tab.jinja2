@@ -27,7 +27,7 @@ mixpanel.init("ade6b64c4db77172707571c1f9cfcebe");</script><!-- end Mixpanel -->
 </ul>
 </div>
 {%- macro slicer_setting(setting, title, label, callback) -%}
-  <div title="{{ title }}" class="input-append" data-bind="visible: !_.isUndefined($data['profile.{{ setting }}']())">
+  <div id="slicer_class_{{ setting }}" title="{{ title }}" class="input-append" data-bind="visible: !_.isUndefined($data['profile.{{ setting }}'])">
     <label for="slicer_input_{{ setting }}" class="control-label">{{ label }}</label>
     {{ caller() }}
   </div>
@@ -56,6 +56,13 @@ mixpanel.init("ade6b64c4db77172707571c1f9cfcebe");</script><!-- end Mixpanel -->
              {%- if add_on %}
                <span class="add-on">{{ add_on }}</span>
              {%- endif %}
+    </div>
+  {%- endcall %}
+{%- endmacro %}
+{%- macro slicer_text(setting, title, label) -%}
+  {% call slicer_setting(setting, title, label) -%}
+    <div class="controls">
+      <input id="slicer_input_{{ setting }}" data-bind="numericValue: $data['profile.{{ setting }}']" type="text"></input>
     </div>
   {%- endcall %}
 {%- endmacro %}
@@ -109,6 +116,11 @@ mixpanel.init("ade6b64c4db77172707571c1f9cfcebe");</script><!-- end Mixpanel -->
       <div class="wrapper">
           <form class="form-horizontal">
               <div class="row">
+                  <div class="span3">
+
+                  </div>
+                  <div class="span3">
+                  </div>
                   <div class="span3">
                       {{ slicer_number("temperature", "Temperature", "Temperature", 150, 315, 1, "°C") }}
                       {{ slicer_number("print_temperature", "Print temperature", "Print temperature", 150, 315, 1, "°C") }}
