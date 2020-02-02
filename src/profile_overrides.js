@@ -104,65 +104,129 @@ export function OverridesViewModel(parameters, array_keys, enum_keys, item_keys,
     };
 
     self.updateOverridesFromProfile = function(profile) {
+        if (self.slicingViewModel.slicer()=='PBCuraEngine') {
+            var span_parent = document.getElementById('basic_overrides').children[0].children[0].children[0];
+            ko.removeNode(span_parent.children[0]);
+            var new_span_element = document.createElement("label");
+            new_span_element.setAttribute('class','span3');
+            span_parent.insertBefore(new_span_element,span_parent.children[0]);
 
-        // Some options are numeric but might have a percent sign after them.
-        // Remove the percent and save it to replace later.
-        self.endings = {};
-        var stripEndings = function(m, k) {
-            if (_.isString(m[k]) && endsWith(m[k], "%")) {
-                self.endings[k] = "%";
-                return m[k].slice(0,-1);
-            } else {
-                return m[k];
-            }
-        }
+            self.profile_dict = profile['metadata']['octoprint_settings'];
+            _.forEach(profile['metadata']['octoprint_settings'], function (v,k) {
+                var key = "profile." + k;
+                var element_id = 'slicer_input_'+k;
+                var class_id = 'slicer_class_'+k;
+                var options_dom_element = document.getElementById(element_id);
+                var class_dom_element = document.getElementById(class_id);
 
-        // Some options are booleans but can be stored as 0/1 or false/true.
-        // Convert to native true/false and keep track of the style.
-        self.booleans = {};
-        var convertBoolean = function(m, k) {
-            var BOOLS = [
-                ["false", "true"],
-                ["False", "True"],
-                ["0", "1"],
-            ];
-            if (m[k] === undefined) {
-                return undefined;
-            }
-            for (var boolType = 0; boolType < BOOLS.length; boolType++) {
-                for (var b = 0; b < BOOLS[boolType].length; b++) {
-                    if (m[k] === BOOLS[boolType][b]) {
-                        self.booleans[k] = BOOLS[boolType];
-                        return !!b;  // Convert 0 to false and 1 to true.
-                    }
+
+                if (key in self === true) {
+                    delete self[key];
+                }
+
+                if ( options_dom_element===null && class_dom_element===null ) {
+                    var parent = document.getElementById('basic_overrides').children[0].children[0].children[0].children[0];
+                    var class_dom_element = document.createElement("div");
+                    var options_dom_element = document.createElement("input");
+                    class_dom_element.id = class_id;
+                    options_dom_element.id = element_id;
+
+                    class_dom_element.setAttribute('title',k);
+                    class_dom_element.setAttribute('class','input-append');
+                    class_dom_element.setAttribute('data-bind',"visible: !_.isUndefined($data['profile."+k+"'])");
+
+                    var label_dom_element = document.createElement("label");
+                    label_dom_element.setAttribute('for',element_id);
+                    label_dom_element.setAttribute('class','control-label');
+                    label_dom_element.setAttribute('style','overflow: auto;');
+                    label_dom_element.appendChild(document.createTextNode(k));
+
+                    var div_dom_element = document.createElement("div");
+                    div_dom_element.setAttribute('class','controls');
+
+                    options_dom_element.setAttribute('data-bind',"value: $data['profile."+k+"']");
+                    options_dom_element.setAttribute('type','text');
+
+                    div_dom_element.appendChild(options_dom_element);
+                    class_dom_element.appendChild(label_dom_element);
+                    class_dom_element.appendChild(div_dom_element);
+                    parent.appendChild(class_dom_element);
+                }
+                self[key] = ko.observable();
+                try {
+                    $(class_id).unbind();
+                    ko.cleanNode(class_dom_element);
+                    ko.applyBindings(self,class_dom_element);
+                    $(element_id).unbind();
+                    ko.cleanNode(options_dom_element);
+                    ko.applyBindings(self,options_dom_element);
+                } catch (err) {
+                    console.log(err);
+                }
+                console.log(key);
+                self[key](v);
+                console.log(self[key]());
+            });
+        } else {
+            // Some options are numeric but might have a percent sign after them.
+            // Remove the percent and save it to replace later.
+            self.endings = {};
+            var stripEndings = function(m, k) {
+                if (_.isString(m[k]) && endsWith(m[k], "%")) {
+                    self.endings[k] = "%";
+                    return m[k].slice(0,-1);
+                } else {
+                    return m[k];
                 }
             }
-            return !!m[k]; // Just take a guess if we can't figure it out.
+
+            // Some options are booleans but can be stored as 0/1 or false/true.
+            // Convert to native true/false and keep track of the style.
+            self.booleans = {};
+            var convertBoolean = function(m, k) {
+                var BOOLS = [
+                    ["false", "true"],
+                    ["False", "True"],
+                    ["0", "1"],
+                ];
+                if (m[k] === undefined) {
+                    return undefined;
+                }
+                for (var boolType = 0; boolType < BOOLS.length; boolType++) {
+                    for (var b = 0; b < BOOLS[boolType].length; b++) {
+                        if (m[k] === BOOLS[boolType][b]) {
+                            self.booleans[k] = BOOLS[boolType];
+                            return !!b;  // Convert 0 to false and 1 to true.
+                        }
+                    }
+                }
+                return !!m[k]; // Just take a guess if we can't figure it out.
+            }
+
+
+            // Hacky - Slic3r profiles escape new line to be string '\n'
+            if (self.slicingViewModel.slicer() == 'slic3r'){
+                _.forEach(['end_gcode', 'start_gcode'], function(key) {
+                    profile[key] = profile[key].replace(/\\n/g, '\n');
+                });
+            }
+
+            // Some options are arrays in cura but not Slic3r.  Keep track of which.
+            self.isArray = [];
+
+            _.forEach(ITEM_KEYS, function(k) { self["profile." + k]( stripEndings(profile,k) ); });
+            _.forEach(BOOLEAN_KEYS, function(k) { self["profile." + k]( convertBoolean(profile,k) ); });
+            _.forEach(ENUM_KEYS, function(v, k) { self["profile." + k]( profile[k] ); });
+            _.forEach(ARRAY_KEYS, function(k) {
+                // Some config options are arrays in cura but not in Slic3r.
+                // Detect which ones are arrays and only convert those.
+                if (_.isArray(profile[k])) {
+                    self.isArray.push(k);  // Remember this for later.
+                    self["profile." + k](profile[k][0]);
+                } else {
+                    self["profile." + k](profile[k]);
+                }});
         }
-
-
-        // Hacky - Slic3r profiles escape new line to be string '\n'
-        if (self.slicingViewModel.slicer() == 'slic3r'){
-            _.forEach(['end_gcode', 'start_gcode'], function(key) {
-                profile[key] = profile[key].replace(/\\n/g, '\n');
-            });
-        }
-
-        // Some options are arrays in cura but not Slic3r.  Keep track of which.
-        self.isArray = [];
-
-        _.forEach(ITEM_KEYS, function(k) { self["profile." + k]( stripEndings(profile,k) ); });
-        _.forEach(BOOLEAN_KEYS, function(k) { self["profile." + k]( convertBoolean(profile,k) ); });
-        _.forEach(ENUM_KEYS, function(v, k) { self["profile." + k]( profile[k] ); });
-        _.forEach(ARRAY_KEYS, function(k) {
-            // Some config options are arrays in cura but not in Slic3r.
-            // Detect which ones are arrays and only convert those.
-            if (_.isArray(profile[k])) {
-                self.isArray.push(k);  // Remember this for later.
-                self["profile." + k](profile[k][0]);
-            } else {
-                self["profile." + k](profile[k]);
-            }});
     };
 
 
@@ -202,68 +266,140 @@ export function OverridesViewModel(parameters, array_keys, enum_keys, item_keys,
 
 
     self.toJS = function() {
-        var result = ko.mapping.toJS(self, {
-            ignore: ["slicingViewModel",
-                "updateOverridesFromProfile",
-                "updateOverrides",
-                "toJS",
-                "optionsForKey",
-                "stripEndings",
-                "isArray",
-                "endings"]
+        var result$$1 = ko.mapping.toJS(self, {
+            ignore: ["slicingViewModel", "updateOverridesFromProfile", "updateOverrides", "toJS", "optionsForKey", "stripEndings", "isArray", "endings"]
         });
-        _.forEach(ITEM_KEYS, function(k) {
-            if(self.endings.hasOwnProperty(k)) {
-                result["profile." + k] += self.endings[k];
-            }});
-        _.forEach(BOOLEAN_KEYS, function(k) {
-            if(self.booleans.hasOwnProperty(k)) {
-                // Convert false/true to the correct string.
-                result["profile." + k] = self.booleans[k][result["profile." + k]?1:0];
-            }});
-
-        for (var key in result) {
-            var baseKey = key.replace("profile.", "");
-            // Convert it back to an array if it was an array originally.
-            if (_.contains(ARRAY_KEYS, baseKey) && _.contains(self.isArray, baseKey)) {
-                result[key] = [result[key]];
-            }
-        }
-
-        _.forEach(result, function(v, k) {
-            // If the value is undefined, must not be valid for this slicer.
-            if (k.startsWith("profile.") && result[k] === undefined) {
-                delete result[k];
-            }
-        });
-
-        // Hacky - Slic3r profiles escape new line to be string '\n'
-        if (self.slicingViewModel.slicer() == 'slic3r'){
-            _.forEach(['profile.end_gcode', 'profile.start_gcode'], function(key) {
-                result[key] = result[key].replace(/\n/g, '\\n');
+        if (self.slicingViewModel.slicer()=='PBCuraEngine') {
+            var key_start = 'profile.';
+            _.forEach(self, function (v,k) {
+              if (typeof k === 'string' || k instanceof String) {
+                  if (k.startsWith(key_start)==true) {
+                      //~ key = k.replace(key_start,'');
+                      result$$1["profile." + k] = v();
+                  }
+              }
+          });
+        } else {
+            _.forEach(ITEM_KEYS, function (k) {
+                if (self.endings.hasOwnProperty(k)) {
+                    result$$1["profile." + k] += self.endings[k];
+                }
             });
-        }
+            _.forEach(BOOLEAN_KEYS, function (k) {
+                if (self.booleans.hasOwnProperty(k)) {
+                    // Convert false/true to the correct string.
+                    result$$1["profile." + k] = self.booleans[k][result$$1["profile." + k] ? 1 : 0];
+                }
+            });
 
-        // Do all the overrides.  If there are conflicting overrides,
-        // it's going to behave surprisingly.
-        for (let key of FORCED_SETTINGS.keys()) {
-            let profile_key = "profile." + key;
-            if (result.hasOwnProperty(profile_key)) {
-                // This key is in our overrides.
-                for (let value of FORCED_SETTINGS.get(key).keys()) {
-                    if (result[profile_key] == value) {
-                        // This value causes overriding.
-                        let overrides = FORCED_SETTINGS.get(key).get(value);
-                        for (let [overrideKey, overrideValue] of overrides.entries()) {
-                            let profile_overrideKey = "profile." + overrideKey;
-                            result[profile_overrideKey] = overrideValue;
+            for (var key in result$$1) {
+                var baseKey = key.replace("profile.", "");
+                // Convert it back to an array if it was an array originally.
+                if (_.contains(ARRAY_KEYS, baseKey) && _.contains(self.isArray, baseKey)) {
+                    result$$1[key] = [result$$1[key]];
+                }
+            }
+
+            _.forEach(result$$1, function (v, k) {
+                // If the value is undefined, must not be valid for this slicer.
+                if (k.startsWith("profile.") && result$$1[k] === undefined) {
+                    delete result$$1[k];
+                }
+            });
+
+            // Hacky - Slic3r profiles escape new line to be string '\n'
+            if (self.slicingViewModel.slicer() == 'slic3r') {
+                _.forEach(['profile.end_gcode', 'profile.start_gcode'], function (key) {
+                    result$$1[key] = result$$1[key].replace(/\n/g, '\\n');
+                });
+            }
+
+            // Do all the overrides.  If there are conflicting overrides,
+            // it's going to behave surprisingly.
+            var _iteratorNormalCompletion = true;
+            var _didIteratorError = false;
+            var _iteratorError = undefined;
+
+            try {
+                for (var _iterator = FORCED_SETTINGS.keys()[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
+                    var _key = _step.value;
+
+                    var profile_key = "profile." + _key;
+                    if (result$$1.hasOwnProperty(profile_key)) {
+                        // This key is in our overrides.
+                        var _iteratorNormalCompletion2 = true;
+                        var _didIteratorError2 = false;
+                        var _iteratorError2 = undefined;
+
+                        try {
+                            for (var _iterator2 = FORCED_SETTINGS.get(_key).keys()[Symbol.iterator](), _step2; !(_iteratorNormalCompletion2 = (_step2 = _iterator2.next()).done); _iteratorNormalCompletion2 = true) {
+                                var value$$1 = _step2.value;
+
+                                if (result$$1[profile_key] == value$$1) {
+                                    // This value causes overriding.
+                                    var overrides = FORCED_SETTINGS.get(_key).get(value$$1);
+                                    var _iteratorNormalCompletion3 = true;
+                                    var _didIteratorError3 = false;
+                                    var _iteratorError3 = undefined;
+
+                                    try {
+                                        for (var _iterator3 = overrides.entries()[Symbol.iterator](), _step3; !(_iteratorNormalCompletion3 = (_step3 = _iterator3.next()).done); _iteratorNormalCompletion3 = true) {
+                                            var _step3$value = slicedToArray(_step3.value, 2),
+                                                overrideKey = _step3$value[0],
+                                                overrideValue = _step3$value[1];
+
+                                            var profile_overrideKey = "profile." + overrideKey;
+                                            result$$1[profile_overrideKey] = overrideValue;
+                                        }
+                                    } catch (err) {
+                                        _didIteratorError3 = true;
+                                        _iteratorError3 = err;
+                                    } finally {
+                                        try {
+                                            if (!_iteratorNormalCompletion3 && _iterator3.return) {
+                                                _iterator3.return();
+                                            }
+                                        } finally {
+                                            if (_didIteratorError3) {
+                                                throw _iteratorError3;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (err) {
+                            _didIteratorError2 = true;
+                            _iteratorError2 = err;
+                        } finally {
+                            try {
+                                if (!_iteratorNormalCompletion2 && _iterator2.return) {
+                                    _iterator2.return();
+                                }
+                            } finally {
+                                if (_didIteratorError2) {
+                                    throw _iteratorError2;
+                                }
+                            }
                         }
+                    }
+                }
+            } catch (err) {
+                _didIteratorError = true;
+                _iteratorError = err;
+            } finally {
+                try {
+                    if (!_iteratorNormalCompletion && _iterator.return) {
+                        _iterator.return();
+                    }
+                } finally {
+                    if (_didIteratorError) {
+                        throw _iteratorError;
                     }
                 }
             }
         }
-
-        return result;
+        console.log(result$$1);
+        return result$$1;
     };
 }
 
